@@ -1,0 +1,102 @@
+[
+  {
+    "object_id": 101,
+    "x_m": 44.9,
+    "y_m": 0.6,
+    "z_m": 0.9,
+    "num_points": 144,
+    "confidence": 0.98,
+    "timestamp": 1740355200.037,
+    "note": "confirmed_multi_sensor"
+  },
+  {
+    "object_id": 102,
+    "x_m": 62.4,
+    "y_m": 3.7,
+    "z_m": 0.8,
+    "num_points": 97,
+    "confidence": 0.95,
+    "timestamp": 1740355200.037,
+    "note": "confirmed_multi_sensor"
+  },
+  {
+    "object_id": 103,
+    "x_m": 38.2,
+    "y_m": -1.7,
+    "z_m": 1.0,
+    "num_points": 183,
+    "confidence": 0.93,
+    "timestamp": 1740355200.037,
+    "note": "confirmed_multi_sensor"
+  },
+  {
+    "object_id": 104,
+    "x_m": 95.7,
+    "y_m": 0.8,
+    "z_m": 0.8,
+    "num_points": 56,
+    "confidence": 0.90,
+    "timestamp": 1740355200.037,
+    "note": "confirmed_multi_sensor"
+  },
+  {
+    "object_id": 105,
+    "x_m": 119.5,
+    "y_m": -0.6,
+    "z_m": 0.7,
+    "num_points": 37,
+    "confidence": 0.85,
+    "timestamp": 1740355200.037,
+    "note": "confirmed_multi_sensor"
+  },
+  {
+    "object_id": 108,
+    "x_m": 12.4,
+    "y_m": 5.9,
+    "z_m": 1.6,
+    "num_points": 23,
+    "confidence": 0.63,
+    "timestamp": 1740355200.037,
+    "note": "camera_lidar_only_shoulder_pedestrian"
+  },
+  {
+    "object_id": 109,
+    "x_m": 18.8,
+    "y_m": -6.1,
+    "z_m": 1.5,
+    "num_points": 18,
+    "confidence": 0.56,
+    "timestamp": 1740355200.037,
+    "note": "camera_lidar_only_shoulder_pedestrian"
+  },
+  {
+    "object_id": 110,
+    "x_m": 28.5,
+    "y_m": -4.4,
+    "z_m": 1.2,
+    "num_points": 32,
+    "confidence": 0.69,
+    "timestamp": 1740355200.037,
+    "note": "radar_lidar_only"
+  },
+  {
+    "object_id": 111,
+    "x_m": 209.6,
+    "y_m": 4.3,
+    "z_m": 0.7,
+    "num_points": 11,
+    "confidence": 0.52,
+    "timestamp": 1740355200.037,
+    "note": "radar_lidar_only_low_point_count"
+  },
+  {
+    "object_id": 401,
+    "x_m": 7.3,
+    "y_m": 2.2,
+    "z_m": 0.2,
+    "num_points": 7,
+    "confidence": 0.27,
+    "timestamp": 1740355200.037,
+    "note": "false_positive_road_debris"
+  }
+]

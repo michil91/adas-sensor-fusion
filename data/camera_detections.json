@@ -1,0 +1,122 @@
+[
+  {
+    "object_id": 101,
+    "class": "vehicle",
+    "bounding_box": { "x": 840, "y": 398, "w": 182, "h": 94 },
+    "confidence": 0.97,
+    "timestamp": 1740355200.042,
+    "note": "confirmed_multi_sensor"
+  },
+  {
+    "object_id": 102,
+    "class": "vehicle",
+    "bounding_box": { "x": 1108, "y": 418, "w": 145, "h": 76 },
+    "confidence": 0.94,
+    "timestamp": 1740355200.042,
+    "note": "confirmed_multi_sensor"
+  },
+  {
+    "object_id": 103,
+    "class": "vehicle",
+    "bounding_box": { "x": 592, "y": 406, "w": 164, "h": 88 },
+    "confidence": 0.91,
+    "timestamp": 1740355200.042,
+    "note": "confirmed_multi_sensor"
+  },
+  {
+    "object_id": 104,
+    "class": "vehicle",
+    "bounding_box": { "x": 916, "y": 448, "w": 104, "h": 57 },
+    "confidence": 0.89,
+    "timestamp": 1740355200.042,
+    "note": "confirmed_multi_sensor"
+  },
+  {
+    "object_id": 105,
+    "class": "vehicle",
+    "bounding_box": { "x": 748, "y": 458, "w": 88, "h": 51 },
+    "confidence": 0.86,
+    "timestamp": 1740355200.042,
+    "note": "confirmed_multi_sensor"
+  },
+  {
+    "object_id": 106,
+    "class": "vehicle",
+    "bounding_box": { "x": 476, "y": 465, "w": 68, "h": 41 },
+    "confidence": 0.80,
+    "timestamp": 1740355200.042,
+    "note": "camera_radar_only"
+  },
+  {
+    "object_id": 107,
+    "class": "vehicle",
+    "bounding_box": { "x": 1298, "y": 453, "w": 82, "h": 47 },
+    "confidence": 0.83,
+    "timestamp": 1740355200.042,
+    "note": "camera_radar_only"
+  },
+  {
+    "object_id": 108,
+    "class": "pedestrian",
+    "bounding_box": { "x": 198, "y": 378, "w": 31, "h": 72 },
+    "confidence": 0.62,
+    "timestamp": 1740355200.042,
+    "note": "camera_lidar_only"
+  },
+  {
+    "object_id": 109,
+    "class": "pedestrian",
+    "bounding_box": { "x": 1702, "y": 385, "w": 27, "h": 66 },
+    "confidence": 0.55,
+    "timestamp": 1740355200.042,
+    "note": "camera_lidar_only"
+  },
+  {
+    "object_id": 201,
+    "class": "pedestrian",
+    "bounding_box": { "x": 952, "y": 498, "w": 19, "h": 41 },
+    "confidence": 0.22,
+    "timestamp": 1740355200.042,
+    "note": "false_positive_shadow"
+  },
+  {
+    "object_id": 202,
+    "class": "cyclist",
+    "bounding_box": { "x": 1448, "y": 476, "w": 36, "h": 61 },
+    "confidence": 0.31,
+    "timestamp": 1740355200.042,
+    "note": "false_positive_road_marking"
+  },
+  {
+    "object_id": 203,
+    "class": "vehicle",
+    "bounding_box": { "x": 1574, "y": 442, "w": 54, "h": 33 },
+    "confidence": 0.46,
+    "timestamp": 1740355200.042,
+    "note": "low_confidence_partial_occlusion"
+  },
+  {
+    "object_id": 204,
+    "class": "vehicle",
+    "bounding_box": { "x": 388, "y": 433, "w": 63, "h": 39 },
+    "confidence": 0.74,
+    "timestamp": 1740355200.042,
+    "note": "camera_only"
+  },
+  {
+    "object_id": 205,
+    "class": "vehicle",
+    "bounding_box": { "x": 1048, "y": 472, "w": 59, "h": 36 },
+    "confidence": 0.68,
+    "timestamp": 1740355200.042,
+    "note": "camera_only"
+  },
+  {
+    "object_id": 206,
+    "class": "cyclist",
+    "bounding_box": { "x": 152, "y": 403, "w": 33, "h": 59 },
+    "confidence": 0.38,
+    "timestamp": 1740355200.042,
+    "note": "low_confidence_camera_only"
+  }
+]

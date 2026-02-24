@@ -1,0 +1,110 @@
+[
+  {
+    "object_id": 101,
+    "range_m": 45.2,
+    "velocity_mps": -8.3,
+    "azimuth_deg": 0.8,
+    "confidence": 0.96,
+    "timestamp": 1740355200.051,
+    "note": "confirmed_multi_sensor"
+  },
+  {
+    "object_id": 102,
+    "range_m": 62.7,
+    "velocity_mps": -10.1,
+    "azimuth_deg": 3.2,
+    "confidence": 0.93,
+    "timestamp": 1740355200.051,
+    "note": "confirmed_multi_sensor"
+  },
+  {
+    "object_id": 103,
+    "range_m": 38.6,
+    "velocity_mps": -5.4,
+    "azimuth_deg": -2.6,
+    "confidence": 0.90,
+    "timestamp": 1740355200.051,
+    "note": "confirmed_multi_sensor"
+  },
+  {
+    "object_id": 104,
+    "range_m": 95.4,
+    "velocity_mps": -13.7,
+    "azimuth_deg": 1.4,
+    "confidence": 0.88,
+    "timestamp": 1740355200.051,
+    "note": "confirmed_multi_sensor"
+  },
+  {
+    "object_id": 105,
+    "range_m": 120.9,
+    "velocity_mps": -16.2,
+    "azimuth_deg": -1.0,
+    "confidence": 0.84,
+    "timestamp": 1740355200.051,
+    "note": "confirmed_multi_sensor"
+  },
+  {
+    "object_id": 106,
+    "range_m": 155.6,
+    "velocity_mps": -19.8,
+    "azimuth_deg": 4.5,
+    "confidence": 0.77,
+    "timestamp": 1740355200.051,
+    "note": "camera_radar_only"
+  },
+  {
+    "object_id": 107,
+    "range_m": 178.3,
+    "velocity_mps": -22.4,
+    "azimuth_deg": -5.2,
+    "confidence": 0.72,
+    "timestamp": 1740355200.051,
+    "note": "camera_radar_only"
+  },
+  {
+    "object_id": 110,
+    "range_m": 28.8,
+    "velocity_mps": -3.1,
+    "azimuth_deg": -8.3,
+    "confidence": 0.67,
+    "timestamp": 1740355200.051,
+    "note": "radar_lidar_only"
+  },
+  {
+    "object_id": 111,
+    "range_m": 210.4,
+    "velocity_mps": -26.5,
+    "azimuth_deg": 6.7,
+    "confidence": 0.59,
+    "timestamp": 1740355200.051,
+    "note": "radar_lidar_only"
+  },
+  {
+    "object_id": 301,
+    "range_m": 85.2,
+    "velocity_mps": 2.4,
+    "azimuth_deg": 12.6,
+    "confidence": 0.34,
+    "timestamp": 1740355200.051,
+    "note": "low_confidence_possible_clutter"
+  },
+  {
+    "object_id": 302,
+    "range_m": 142.7,
+    "velocity_mps": -11.9,
+    "azimuth_deg": -9.1,
+    "confidence": 0.48,
+    "timestamp": 1740355200.051,
+    "note": "low_confidence_radar_only"
+  },
+  {
+    "object_id": 303,
+    "range_m": 67.4,
+    "velocity_mps": 0.9,
+    "azimuth_deg": 15.2,
+    "confidence": 0.19,
+    "timestamp": 1740355200.051,
+    "note": "false_positive_roadside_structure"
+  }
+]
