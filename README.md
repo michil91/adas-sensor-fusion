@@ -25,6 +25,16 @@ In production ADAS systems, no single sensor provides sufficient reliability for
 | `src/visualizer.py` | Generates 2D bird's-eye-view and 3D perspective plots with confidence-scaled markers and range zone overlays |
 | `main.py` | Orchestrates the full pipeline |
 
+## Results
+
+Bird's-eye-view of all 21 fused tracks. Green circles are confirmed detections, orange triangles tentative, and red crosses unconfirmed. Marker size scales with fused confidence. Dashed rings mark the Near (50 m), Mid (120 m), and 200 m range zone boundaries that govern the sensor weight transitions.
+
+![Bird's-eye-view fusion result](docs/fusion_result.png)
+
+3D perspective of the same scene, with object height sourced from LiDAR cluster centroids where available. Vertical stems connect each detection to the ground plane to aid depth perception.
+
+![3D perspective fusion result](docs/fusion_result_3d.png)
+
 ## Key Design Decisions
 
 **Range-dependent weighting:** Fixed sensor weights assume constant reliability across distance, which is physically incorrect. Lidar point density drops with range squared, degrading position estimates at distance. Radar maintains consistent range accuracy via time-of-flight regardless of distance. The weighting function interpolates smoothly between near (0–50 m), mid (50–120 m), and far (120 m+) zones to avoid discontinuities at boundaries. In production systems, these weights would typically be learned from ground-truth data rather than hand-set, but explicit engineering rationale is used here to demonstrate the underlying reasoning.
