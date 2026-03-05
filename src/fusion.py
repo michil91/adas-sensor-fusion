@@ -408,13 +408,14 @@ def _weighted_average(values: list[float], weights: list[float]) -> float:
 def _fuse_position(
     positions: list[tuple[float, float]],
     weights: list[float],
-) -> FusedPosition:
+) -> Optional[FusedPosition]:
     """Fuse a list of (x, y) positions via normalised weighted average.
 
     NaN entries (e.g. a degenerate camera projection) are silently dropped
     so that a bad camera estimate does not corrupt an otherwise good
-    radar+lidar position.  If every position is NaN the result is (0, 0)
-    with a warning.
+    radar+lidar position.  If every position is NaN the function returns
+    ``None`` so the caller can exclude the track entirely rather than
+    placing a phantom object at the ego-vehicle's origin.
     """
     valid_pairs = [
         (pos, w)
@@ -423,8 +424,7 @@ def _fuse_position(
     ]
 
     if not valid_pairs:
-        logger.warning("_fuse_position: all positions are NaN; returning (0, 0)")
-        return FusedPosition(x_m=0.0, y_m=0.0)
+        return None
 
     xs = [p[0] for p, _ in valid_pairs]
     ys = [p[1] for p, _ in valid_pairs]
@@ -607,7 +607,15 @@ def fuse_detections(sensor_data: SensorData) -> list[FusedObject]:
         obj_class  = _object_class(cam, rad, lid)
         fused_conf = round(_weighted_average(confidences, raw_weights), 4)
         fused_pos  = _fuse_position(positions, raw_weights)
-        status     = _classify(len(sensors_seen), fused_conf, obj_class)
+
+        if fused_pos is None:
+            logger.warning(
+                "object_id=%d: no valid position from any sensor — track excluded",
+                oid,
+            )
+            continue
+
+        status = _classify(len(sensors_seen), fused_conf, obj_class)
 
         logger.debug(
             "object_id=%-4d  range=%5.1fm  w=(L=%.2f,R=%.2f,C=%.2f)  "
