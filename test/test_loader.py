@@ -13,7 +13,6 @@ class _WarningCollector(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         self.records.append(self.format(record))
 
-
 collector = _WarningCollector()
 logging.getLogger("src.data_loader").addHandler(collector)
 logging.getLogger("src.data_loader").setLevel(logging.WARNING)
