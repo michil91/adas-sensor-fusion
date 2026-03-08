@@ -118,5 +118,21 @@
     "confidence": 0.38,
     "timestamp": 1740355200.042,
     "note": "low_confidence_camera_only"
+  },
+  {
+    "object_id": 207,
+    "class": "pedestrian",
+    "bounding_box": { "x": 1013, "y": 468, "w": 21, "h": 65 },
+    "confidence": 0.72,
+    "timestamp": 1740355200.042,
+    "note": "long_range_vru_pedestrian_lidar_camera"
+  },
+  {
+    "object_id": 208,
+    "class": "cyclist",
+    "bounding_box": { "x": 875, "y": 471, "w": 25, "h": 58 },
+    "confidence": 0.68,
+    "timestamp": 1740355200.042,
+    "note": "long_range_vru_cyclist_lidar_camera"
   }
 ]

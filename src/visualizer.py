@@ -8,6 +8,12 @@ Both functions share the same visual language:
   - Red  x-marks           → 'unconfirmed' tracks
   - Marker area scales linearly with fused confidence
   - Dashed concentric rings mark the Near / Mid / Far fusion weight zones
+
+When a weather condition is supplied, both plots gain:
+  - A text box (upper-right) summarising sensor impacts for that condition
+  - A dashed red circle at the LiDAR max-range cutoff (where applicable)
+  - Heavy-rain-specific callout arrows for the safety-critical objects
+    documented in the DESIGN NOTE in src/fusion.py
 """
 
 from __future__ import annotations
@@ -42,8 +48,6 @@ _AX_BG   = "#161b22"   # axes face colour
 _PANE_ED = "#30363d"   # 3-D pane edge colour
 
 # Status → colour and matplotlib marker code.
-# 'cautionary' uses a brighter orange-amber distinct from tentative's deeper
-# amber, with a diamond shape to differentiate from tentative's triangle.
 _COLOUR = {
     "confirmed":   "#2ea043",   # green
     "tentative":   "#e69500",   # deep amber
@@ -57,7 +61,7 @@ _MARKER = {
     "unconfirmed": "x",   # cross
 }
 
-# Zone boundary radii and their names
+# Zone boundary radii and their labels
 _RINGS    = [50, 120, 200]
 _RING_LBL = {50: "Near 50 m", 120: "Mid 120 m", 200: "200 m"}
 
@@ -65,7 +69,70 @@ EGO_COLOUR = "#58a6ff"
 
 
 # ---------------------------------------------------------------------------
-# Internal helpers
+# Weather annotation constants
+# ---------------------------------------------------------------------------
+
+# Human-readable impact summary per condition (multi-line).
+# None → no box rendered (clear weather).
+_WEATHER_INFO: dict[str, str | None] = {
+    "clear":      None,
+    "rain":       (
+        "Rain\n"
+        "LiDAR conf: \u221220%  \u2022  Camera conf: \u22127.5%\n"
+        "Radar conf: \u22125%"
+    ),
+    "heavy_rain": (
+        "Heavy Rain\n"
+        "LiDAR range limited to 80 m (rain scattering)\n"
+        "Camera conf: \u221215%  \u2022  Radar conf: \u221210%"
+    ),
+    "fog":        (
+        "Fog\n"
+        "LiDAR range limited to 60 m\n"
+        "Camera conf: \u221230%"
+    ),
+    "snow":       (
+        "Snow\n"
+        "LiDAR range limited to 100 m\n"
+        "Camera conf: \u221220%  \u2022  Radar conf: \u221215%"
+    ),
+    "night":      "Night\nCamera conf: \u221225%",
+    "glare":      "Glare\nCamera conf: \u221240% (forward 30\u00b0 cone)",
+}
+
+# LiDAR hard range cutoff (m) per condition.
+# Conditions absent from this dict have no range cutoff.
+_LIDAR_RANGE_CUTOFF: dict[str, float] = {
+    "heavy_rain": 80.0,
+    "fog":        60.0,
+    "snow":       100.0,
+}
+
+# Callout text for the three heavy-rain safety findings.
+# Unicode escapes: → U+2192, – U+2013, — U+2014
+_CALLOUT_207 = (
+    "ID 207 (pedestrian):\n"
+    "confirmed \u2192 cautionary\n"
+    "LiDAR lost to rain scattering at 95 m\n"
+    "Camera-only detection triggers\n"
+    "precautionary response"
+)
+_CALLOUT_208 = (
+    "ID 208 (cyclist):\n"
+    "confirmed \u2192 unconfirmed\n"
+    "Camera conf 0.578 falls below\n"
+    "0.60 cautionary threshold by 0.022"
+)
+_CALLOUT_108_109 = (
+    "IDs 108\u2013109 (pedestrians):\n"
+    "confirmed \u2192 tentative at 14\u201320 m\n"
+    "Close-range confidence degradation\n"
+    "\u2014 no sensor dropout"
+)
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers — shared
 # ---------------------------------------------------------------------------
 
 def _class_label(obj: FusedObject) -> str:
@@ -110,6 +177,212 @@ def _legend_handles() -> list[Line2D]:
     ]
 
 
+def _by_id(objects: list[FusedObject]) -> dict[int, FusedObject]:
+    return {o["object_id"]: o for o in objects}
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers — bird's-eye-view weather annotations
+# ---------------------------------------------------------------------------
+
+def _bev_weather_box(ax: plt.Axes, weather_condition: str) -> None:
+    """Draw the weather summary box in the upper-right corner."""
+    text = _WEATHER_INFO.get(weather_condition)
+    if not text:
+        return
+    ax.text(
+        0.99, 0.99, text,
+        transform=ax.transAxes, ha="right", va="top",
+        fontsize=7.5, color="white", linespacing=1.6,
+        bbox=dict(boxstyle="round,pad=0.5",
+                  facecolor="#1c2128", edgecolor="#e69500", alpha=0.90),
+        zorder=20,
+    )
+
+
+def _bev_lidar_ring(ax: plt.Axes, weather_condition: str) -> None:
+    """Draw the LiDAR max-range dashed red circle on the BEV plot."""
+    cutoff = _LIDAR_RANGE_CUTOFF.get(weather_condition)
+    if cutoff is None:
+        return
+    theta = np.linspace(0.0, 2.0 * math.pi, 720)
+    ax.plot(
+        cutoff * np.cos(theta), cutoff * np.sin(theta),
+        color="#f85149", alpha=0.75, linewidth=1.5, linestyle="--", zorder=4,
+    )
+    ax.text(
+        cutoff + 1.5, 2.5,
+        f"LiDAR cutoff {cutoff:.0f} m",
+        color="#f85149", alpha=0.88, fontsize=7, va="bottom", zorder=4,
+    )
+
+
+def _bev_heavy_rain_callouts(ax: plt.Axes, objects: list[FusedObject]) -> None:
+    """Add the three heavy-rain safety callout arrows to the BEV plot."""
+    idx = _by_id(objects)
+
+    _bev_callout = dict(
+        color="white", fontsize=6.0, ha="left",
+        bbox=dict(boxstyle="round,pad=0.4", facecolor="#1c2128", alpha=0.88),
+        zorder=15,
+    )
+
+    # --- Object 207: confirmed → cautionary ---
+    o207 = idx.get(207)
+    if o207:
+        x, y = o207["fused_position"]["x_m"], o207["fused_position"]["y_m"]
+        col = _COLOUR[o207["status"]]
+        ax.annotate(
+            _CALLOUT_207,
+            xy=(x, y), xytext=(58, 30),
+            va="bottom",
+            arrowprops=dict(arrowstyle="->", color=col, lw=1.0,
+                            connectionstyle="arc3,rad=0.18"),
+            **{**_bev_callout,
+               "bbox": {**_bev_callout["bbox"], "edgecolor": col}},
+        )
+
+    # --- Object 208: confirmed → unconfirmed ---
+    o208 = idx.get(208)
+    if o208:
+        x, y = o208["fused_position"]["x_m"], o208["fused_position"]["y_m"]
+        col = _COLOUR[o208["status"]]
+        ax.annotate(
+            _CALLOUT_208,
+            xy=(x, y), xytext=(78, -31),
+            va="top",
+            arrowprops=dict(arrowstyle="->", color=col, lw=1.0,
+                            connectionstyle="arc3,rad=-0.18"),
+            **{**_bev_callout,
+               "bbox": {**_bev_callout["bbox"], "edgecolor": col}},
+        )
+
+    # --- Objects 108/109: shared callout pointing to their midpoint ---
+    pts = [(idx[oid]["fused_position"]["x_m"], idx[oid]["fused_position"]["y_m"])
+           for oid in (108, 109) if oid in idx]
+    if pts:
+        mx = sum(p[0] for p in pts) / len(pts)
+        my = sum(p[1] for p in pts) / len(pts)
+        col = _COLOUR["tentative"]
+        ax.annotate(
+            _CALLOUT_108_109,
+            xy=(mx, my), xytext=(4, 26),
+            va="bottom",
+            arrowprops=dict(arrowstyle="->", color=col, lw=1.0,
+                            connectionstyle="arc3,rad=0.12"),
+            **{**_bev_callout,
+               "bbox": {**_bev_callout["bbox"], "edgecolor": col}},
+        )
+
+
+def _add_bev_weather(ax: plt.Axes, objects: list[FusedObject],
+                     weather_condition: str) -> None:
+    _bev_weather_box(ax, weather_condition)
+    _bev_lidar_ring(ax, weather_condition)
+    if weather_condition == "heavy_rain":
+        _bev_heavy_rain_callouts(ax, objects)
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers — 3-D perspective weather annotations
+# ---------------------------------------------------------------------------
+
+def _3d_weather_box(ax, weather_condition: str) -> None:
+    """Draw the weather summary box in the upper-right corner of the 3D plot."""
+    text = _WEATHER_INFO.get(weather_condition)
+    if not text:
+        return
+    ax.text2D(
+        0.99, 0.99, text,
+        transform=ax.transAxes, ha="right", va="top",
+        fontsize=7.5, color="white", linespacing=1.6,
+        bbox=dict(boxstyle="round,pad=0.5",
+                  facecolor="#1c2128", edgecolor="#e69500", alpha=0.90),
+        zorder=20,
+    )
+
+
+def _3d_lidar_ring(ax, weather_condition: str) -> None:
+    """Draw the LiDAR max-range red dashed circle on the ground plane."""
+    cutoff = _LIDAR_RANGE_CUTOFF.get(weather_condition)
+    if cutoff is None:
+        return
+    theta = np.linspace(0.0, 2.0 * math.pi, 720)
+    ax.plot(
+        cutoff * np.cos(theta), cutoff * np.sin(theta), np.zeros(720),
+        color="#f85149", alpha=0.75, linewidth=1.5, linestyle="--", zorder=4,
+    )
+
+
+def _3d_stem_label(ax, x0: float, y0: float, z0: float,
+                   xt: float, yt: float, zt: float,
+                   text: str, col: str) -> None:
+    """Draw a stem line from object to text-box position in 3-D space."""
+    ax.plot([x0, xt], [y0, yt], [z0, zt],
+            color=col, lw=0.9, alpha=0.80, zorder=10)
+    ax.text(xt, yt, zt, text,
+            color="white", fontsize=5.8, linespacing=1.45,
+            bbox=dict(boxstyle="round,pad=0.35",
+                      facecolor="#1c2128", edgecolor=col, alpha=0.88),
+            zorder=11)
+
+
+def _3d_heavy_rain_callouts(ax, objects: list[FusedObject]) -> None:
+    """Add stem-line callout labels for the heavy-rain safety objects."""
+    idx = _by_id(objects)
+
+    def _z(o: FusedObject) -> float:
+        return o["lidar"]["z_m"] if o["lidar"] is not None else 0.5
+
+    # --- Object 207 ---
+    o207 = idx.get(207)
+    if o207:
+        x, y = o207["fused_position"]["x_m"], o207["fused_position"]["y_m"]
+        z = _z(o207)
+        col = _COLOUR[o207["status"]]
+        _3d_stem_label(ax, x, y, z, x - 26, y + 13, 1.75,
+                       "ID 207 (pedestrian):\n"
+                       "confirmed \u2192 cautionary\n"
+                       "LiDAR lost at 95 m (rain)\n"
+                       "Camera-only, precautionary", col)
+
+    # --- Object 208 ---
+    o208 = idx.get(208)
+    if o208:
+        x, y = o208["fused_position"]["x_m"], o208["fused_position"]["y_m"]
+        z = _z(o208)
+        col = _COLOUR[o208["status"]]
+        _3d_stem_label(ax, x, y, z, x - 22, y - 17, 1.75,
+                       "ID 208 (cyclist):\n"
+                       "confirmed \u2192 unconfirmed\n"
+                       "Camera conf 0.578 < 0.60\n"
+                       "threshold (margin: 0.022)", col)
+
+    # --- Objects 108 / 109 ---
+    pts = [(idx[oid]["fused_position"]["x_m"],
+            idx[oid]["fused_position"]["y_m"],
+            _z(idx[oid]))
+           for oid in (108, 109) if oid in idx]
+    if pts:
+        mx = sum(p[0] for p in pts) / len(pts)
+        my = sum(p[1] for p in pts) / len(pts)
+        mz = sum(p[2] for p in pts) / len(pts)
+        col = _COLOUR["tentative"]
+        _3d_stem_label(ax, mx, my, mz, mx - 18, my + 15, 2.1,
+                       "IDs 108\u2013109 (pedestrians):\n"
+                       "confirmed \u2192 tentative 14\u201320 m\n"
+                       "Close-range conf degradation\n"
+                       "\u2014 no sensor dropout", col)
+
+
+def _add_3d_weather(ax, objects: list[FusedObject],
+                    weather_condition: str) -> None:
+    _3d_weather_box(ax, weather_condition)
+    _3d_lidar_ring(ax, weather_condition)
+    if weather_condition == "heavy_rain":
+        _3d_heavy_rain_callouts(ax, objects)
+
+
 # ---------------------------------------------------------------------------
 # 2-D bird's-eye-view
 # ---------------------------------------------------------------------------
@@ -117,6 +390,7 @@ def _legend_handles() -> list[Line2D]:
 def plot_birdseye(
     objects: list[FusedObject],
     output_path: Optional[Path | str] = None,
+    weather_condition: Optional[str] = None,
 ) -> Path:
     """Render a 2-D top-down map of fused detections and save to PNG.
 
@@ -128,12 +402,20 @@ def plot_birdseye(
     (50 m), Mid (120 m), and 200 m boundaries that correspond to the
     range-dependent fusion weight zones defined in ``src/fusion.py``.
 
+    When *weather_condition* is provided (any value other than ``'clear'``),
+    the plot gains a weather summary box, a LiDAR range-cutoff circle where
+    applicable, and condition-specific object callouts.
+
     Parameters
     ----------
     objects:
         Fused track list from :func:`src.fusion.fuse_detections`.
     output_path:
         Destination file.  Defaults to ``output/fusion_result.png``.
+    weather_condition:
+        Optional weather condition string (e.g. ``'heavy_rain'``).  Controls
+        which annotations are added.  ``None`` or ``'clear'`` → no weather
+        annotations.
 
     Returns
     -------
@@ -174,8 +456,6 @@ def plot_birdseye(
         x  = o["fused_position"]["x_m"]
         y  = o["fused_position"]["y_m"]
         st = o["status"]
-        # 'x' is an unfilled marker — passing edgecolors triggers a UserWarning
-        # in matplotlib ≤3.7 regardless of value, so omit it for 'x' markers.
         kw: dict = dict(
             marker=_MARKER[st], color=_COLOUR[st],
             s=_marker_size(o["fused_confidence"]),
@@ -190,12 +470,21 @@ def plot_birdseye(
             color="white", fontsize=6.5, alpha=0.92,
         )
 
+    # ── Weather annotations (optional) ────────────────────────────────────────
+    if weather_condition and weather_condition != "clear":
+        _add_bev_weather(ax, objects, weather_condition)
+
     # ── Axes & styling ────────────────────────────────────────────────────────
     t_min, t_max = _timestamp_range(objects)
+    weather_suffix = (
+        f" — {weather_condition.replace('_', ' ').title()}"
+        if weather_condition and weather_condition != "clear"
+        else ""
+    )
     ax.set_xlabel("x (m) — forward", color="#8b949e", fontsize=9, labelpad=6)
     ax.set_ylabel("y (m) — lateral (left +)", color="#8b949e", fontsize=9, labelpad=6)
     ax.set_title(
-        "ADAS Sensor Fusion — Bird's-Eye View\n"
+        f"ADAS Sensor Fusion — Bird's-Eye View{weather_suffix}\n"
         f"Timestamp  {t_min:.3f} – {t_max:.3f} s",
         color="white", fontsize=11, pad=12,
     )
@@ -226,6 +515,7 @@ def plot_birdseye(
 def plot_3d(
     objects: list[FusedObject],
     output_path: Optional[Path | str] = None,
+    weather_condition: Optional[str] = None,
 ) -> Path:
     """Render a 3-D perspective view of fused detections and save to PNG.
 
@@ -238,11 +528,10 @@ def plot_3d(
     ``ax.view_init(elev=25, azim=-110)`` approximates the scene coordinate
     position (−15, −10, 12) — 15 m behind the ego, 10 m to the right, 12 m
     above ground — looking toward the detection field (≈ 100 m ahead).
-    The elevation is raised slightly from the geometric 6° to give a cleaner
-    separation of near and far objects in the rendered image.
 
-    Range rings are drawn as circles on the z = 0 ground plane so they remain
-    visible from any camera elevation.
+    Range rings are drawn as circles on the z = 0 ground plane.  When a
+    weather condition with a LiDAR range cutoff is supplied, an additional
+    dashed red ring marks the effective LiDAR boundary.
 
     Parameters
     ----------
@@ -250,6 +539,9 @@ def plot_3d(
         Fused track list from :func:`src.fusion.fuse_detections`.
     output_path:
         Destination file.  Defaults to ``output/fusion_result_3d.png``.
+    weather_condition:
+        Optional weather condition string.  Controls which annotations are
+        added.  ``None`` or ``'clear'`` → no weather annotations.
 
     Returns
     -------
@@ -303,40 +595,42 @@ def plot_3d(
         if _MARKER[st] != "x":
             kw3["edgecolors"] = "white"
         ax.scatter([x], [y], [z], **kw3)
-        # Vertical stem from object down to ground plane
         ax.plot([x, x], [y, y], [0.0, z],
                 color=_COLOUR[st], alpha=0.22, linewidth=0.6, zorder=3)
         ax.text(x, y, z + 0.40, str(o["object_id"]),
                 color="white", fontsize=5.5, alpha=0.88)
 
+    # ── Weather annotations (optional) ────────────────────────────────────────
+    if weather_condition and weather_condition != "clear":
+        _add_3d_weather(ax, objects, weather_condition)
+
     # ── Axes & styling ────────────────────────────────────────────────────────
     t_min, t_max = _timestamp_range(objects)
+    weather_suffix = (
+        f" — {weather_condition.replace('_', ' ').title()}"
+        if weather_condition and weather_condition != "clear"
+        else ""
+    )
     ax.set_xlabel("x (m) — forward",  color="#8b949e", labelpad=8, fontsize=8)
     ax.set_ylabel("y (m) — lateral",  color="#8b949e", labelpad=8, fontsize=8)
     ax.set_zlabel("z (m) — height",   color="#8b949e", labelpad=8, fontsize=8)
     ax.set_title(
-        "ADAS Sensor Fusion — 3D Perspective\n"
+        f"ADAS Sensor Fusion — 3D Perspective{weather_suffix}\n"
         f"Timestamp  {t_min:.3f} – {t_max:.3f} s",
         color="white", fontsize=11, pad=15,
     )
 
     ax.set_xlim(0, 230)
     ax.set_ylim(-40, 40)
-    ax.set_zlim(0, 2)
+    ax.set_zlim(0, 2.5)   # raised slightly to accommodate annotation labels
 
     ax.tick_params(colors="#8b949e", labelsize=7)
 
-    # Transparent axis panes with subtle edge colour
     for pane in (ax.xaxis.pane, ax.yaxis.pane, ax.zaxis.pane):
         pane.fill = False
         pane.set_edgecolor(_PANE_ED)
     ax.grid(False)
 
-    # Camera viewpoint: approximates position (−15, −10, 12) looking toward
-    # the detection field centre (~100 m ahead of ego).
-    # elev=25°  — vertical look-down angle (raised from geometric ~6° for clarity)
-    # azim=−110° — positions camera on the −x side, rotated slightly toward −y
-    #              (right of vehicle in our left-positive-y convention)
     ax.view_init(elev=25, azim=-110)
 
     ax.legend(

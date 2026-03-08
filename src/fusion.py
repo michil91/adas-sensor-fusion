@@ -507,6 +507,58 @@ def _classify(num_sensors: int, fused_confidence: float, obj_class: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# DESIGN NOTE — Close-range VRU confidence degradation in adverse weather
+# ---------------------------------------------------------------------------
+#
+# Empirical observation from adverse-weather simulation (heavy_rain condition):
+#
+#   Objects 108 (pedestrian, 13.7 m) and 109 (pedestrian, 19.8 m) are
+#   detected by both LiDAR and camera in clear conditions and are classified
+#   as 'confirmed'.  Under heavy rain, LiDAR confidence falls by 40 % and
+#   camera confidence by 15 %.  Both objects remain visible to both sensors —
+#   there is no sensor dropout because they are well inside the 80 m scattering
+#   cutoff — yet both degrade from 'confirmed' to 'tentative'.
+#
+#   The cause is purely arithmetic: the LiDAR weight dominates at close range
+#   (≈ 0.46 near-zone vs 0.29 camera), so the large LiDAR confidence penalty
+#   pulls the fused score below the VRU confirmation threshold of 0.50.
+#
+# Why this matters:
+#
+#   The 'tentative' tier intentionally withholds AEB authorisation.  For
+#   objects at 108's or 109's range, a vehicle travelling at 50 km/h covers
+#   that distance in ≈ 1.0–1.4 s — within or below the reaction time budget
+#   for any emergency response.  Losing 'confirmed' status on a pedestrian
+#   at 14–20 m in heavy rain is therefore a safety regression, not merely a
+#   classification artefact.
+#
+# Production mitigation — minimum-range safety override (NOT implemented here):
+#
+#   A production fusion system should include a proximity-based confirmation
+#   floor: any VRU detection within a critical proximity zone (suggested
+#   threshold: ≤ 30 m) retains 'confirmed' status regardless of the fused
+#   confidence score, as long as at least one sensor continues to report it.
+#
+#   Rationale: below this range the consequence of inaction is immediate and
+#   irreversible.  The cost of a false positive (unnecessary braking at short
+#   range) is far lower than the cost of a false negative (failure to brake
+#   for a real pedestrian).  This is the same asymmetric-risk argument that
+#   motivates lower VRU confirmation thresholds in the first place, extended
+#   to cover the spatial dimension.
+#
+#   Implementation sketch:
+#     if is_vru and num_sensors >= 1 and representative_range_m <= 30.0:
+#         return "confirmed"   # proximity override — range takes precedence
+#
+#   This override would need to be informed by the representative range at
+#   classification time, which is not currently passed to _classify().
+#   Plumbing that parameter through is left as a deliberate future work item
+#   so that the change is explicit and subject to its own HARA review.
+#
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 

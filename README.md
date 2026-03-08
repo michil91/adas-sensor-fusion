@@ -21,19 +21,32 @@ In production ADAS systems, no single sensor provides sufficient reliability for
 | Module | Responsibility |
 |---|---|
 | `src/data_loader.py` | Loads and validates sensor JSON files with per-modality type checking |
+| `src/environment.py` | Simulates weather-induced sensor degradation; applies physics-based confidence penalties and hard range cutoffs per condition |
 | `src/fusion.py` | Matches detections across sensors by object ID, applies range-dependent weighted averaging for confidence and position, classifies detection reliability with class-aware thresholds |
-| `src/visualizer.py` | Generates 2D bird's-eye-view and 3D perspective plots with confidence-scaled markers and range zone overlays |
-| `main.py` | Orchestrates the full pipeline |
+| `src/visualizer.py` | Generates 2D bird's-eye-view and 3D perspective plots with confidence-scaled markers, range zone overlays, and optional weather-condition annotations |
+| `main.py` | Orchestrates the full pipeline; accepts an optional `--weather` argument |
 
 ## Results
 
-Bird's-eye-view of all 21 fused tracks. Green circles are confirmed detections, orange triangles tentative, and red crosses unconfirmed. Marker size scales with fused confidence. Dashed rings mark the Near (50 m), Mid (120 m), and 200 m range zone boundaries that govern the sensor weight transitions.
+### Clear weather
 
-![Bird's-eye-view fusion result](docs/fusion_result.png)
+Bird's-eye-view of all 23 fused tracks in clear conditions. Green circles are confirmed detections, orange triangles tentative, and red crosses unconfirmed. Marker size scales with fused confidence. Dashed rings mark the Near (50 m), Mid (120 m), and 200 m range zone boundaries that govern the sensor weight transitions. Objects 207 (pedestrian, 95 m) and 208 (cyclist, 110 m) appear as confirmed multi-sensor tracks.
+
+![Bird's-eye-view — clear weather](docs/fusion_result.png)
 
 3D perspective of the same scene, with object height sourced from LiDAR cluster centroids where available. Vertical stems connect each detection to the ground plane to aid depth perception.
 
-![3D perspective fusion result](docs/fusion_result_3d.png)
+![3D perspective — clear weather](docs/fusion_result_3d.png)
+
+### Heavy rain (simulated)
+
+The same scene after applying `--weather heavy_rain` degradation. The dashed red circle marks the 80 m LiDAR scattering cutoff; all LiDAR returns beyond this boundary are dropped. Callout arrows document the three safety-relevant classification changes described in the [Weather Degradation Analysis](#weather-degradation-analysis) section below. The weather summary box (upper right) states the active sensor penalties.
+
+![Bird's-eye-view — heavy rain](docs/fusion_result_heavy_rain.png)
+
+3D perspective under heavy rain. Objects 207 and 208 lose their LiDAR returns and are plotted at z = 0.5 m (no height data). Stem-line callouts annotate the classification regressions directly in scene space.
+
+![3D perspective — heavy rain](docs/fusion_result_3d_heavy_rain.png)
 
 ## Key Design Decisions
 
@@ -45,6 +58,38 @@ Bird's-eye-view of all 21 fused tracks. Green circles are confirmed detections, 
 
 **Single-sensor non-VRU detections remain 'unconfirmed':** For vehicle detections, the risk asymmetry is less extreme and vehicles are larger, more consistent radar/lidar targets. Requiring multi-sensor confirmation for vehicles remains appropriate.
 
+## Weather Degradation Analysis
+
+The `src/environment.py` module simulates how adverse weather degrades each sensor modality before fusion. Degradation is applied to a deep copy of the loaded data so the pipeline can compare clean and degraded outputs in the same run. The heavy rain scenario (`--weather heavy_rain`) reveals three distinct safety-relevant findings.
+
+### Supported conditions
+
+| Condition | LiDAR | Radar | Camera |
+|---|---|---|---|
+| `clear` | Unaffected | Unaffected | Unaffected |
+| `rain` | −20% confidence | −5% confidence | −7.5% confidence |
+| `heavy_rain` | −40% confidence, max range **80 m** | −10% confidence | −15% confidence |
+| `fog` | −50% confidence, max range **60 m** | Unaffected | −30% confidence |
+| `snow` | −30% confidence, max range **100 m** | −15% confidence | −20% confidence |
+| `night` | Unaffected | Unaffected | −25% confidence |
+| `glare` | Unaffected | Unaffected | −40% confidence (forward 30° cone only) |
+
+### Finding 1 — Object 207 (pedestrian, 95 m): safety architecture working as designed
+
+Object 207 is detected by both LiDAR and camera in clear conditions and classified as `confirmed` (fused confidence 0.689, above the VRU threshold of 0.50). In heavy rain, the LiDAR return at 95 m is lost to scattering — beyond the 80 m cutoff. The camera continues to detect the pedestrian; after a 15% confidence penalty its score is 0.612, just above the single-sensor VRU cautionary threshold of 0.60. The track is reclassified as `cautionary`, triggering a precautionary speed reduction and driver alert. This is the cautionary tier functioning as intended: a degraded but still safety-relevant detection receiving a proportional response rather than being discarded.
+
+### Finding 2 — Object 208 (cyclist, 110 m): confidence boundary creates a blind spot
+
+Object 208 follows the same physical path as 207 — LiDAR lost at 110 m, camera-only in heavy rain — but the camera confidence after the 15% weather penalty is 0.578, falling **0.022 below** the 0.60 cautionary threshold. The track is demoted to `unconfirmed` and suppressed from the safety response. The camera is still detecting a real cyclist at 110 m; the classification failure is purely arithmetic. This exposes how fixed confidence thresholds create hard boundaries that weather-induced penalties can push detections across. A production system would need robustness mechanisms at classification boundaries — for example, hysteresis, temporal promotion history, or condition-dependent threshold relaxation.
+
+### Finding 3 — Objects 108/109 (pedestrians, 14–20 m): close-range VRUs lose AEB eligibility through arithmetic alone
+
+Objects 108 and 109 are pedestrians at 14 and 20 m, well within the 80 m LiDAR cutoff. Both retain LiDAR and camera detection in heavy rain — there is no sensor dropout. Despite this, both degrade from `confirmed` to `tentative`. The cause is arithmetic: in the near zone, LiDAR carries approximately 0.46 weight versus 0.29 for camera. The 40% LiDAR confidence penalty therefore dominates the fused score, pulling both tracks below the VRU confirmation threshold of 0.50. The `tentative` tier withholds AEB authorisation. At 50 km/h, a vehicle closes 14–20 m in roughly 1.0–1.4 s — at or below the braking reaction budget. Two real pedestrians at near range lose AEB eligibility through weather-induced arithmetic, not sensor failure.
+
+### Proposed mitigation: proximity-based confirmation floor (not implemented)
+
+The finding above motivates a minimum-range safety override: any VRU detection within a critical proximity zone (suggested ≤ 30 m) should retain `confirmed` status as long as at least one sensor continues to report it, regardless of the fused confidence score. The cost of a false positive (unnecessary braking at short range) is far lower than the cost of a false negative (failure to brake for a pedestrian at 14 m). This override is documented as a design consideration in `src/fusion.py` but deliberately not implemented — the change would require plumbing the representative range into `_classify()` and is subject to its own Hazard Analysis and Risk Assessment review.
+
 ## Confidence Thresholds — A Note on Standards
 
 The thresholds used in this project (0.50 for VRU, 0.70 for non-VRU, 0.60 for cautionary single-sensor VRU) are engineering design decisions justified by risk asymmetry, not values prescribed by any regulatory standard. ISO 26262 defines process rigor through ASIL classification — pedestrian detection failure is typically rated ASIL C/D, demanding the most stringent development and validation processes. Euro NCAP defines system-level AEB performance requirements (detection at specific speeds and scenarios). Neither standard prescribes internal fusion confidence thresholds; these are left to the implementer's safety analysis. Production systems would derive these thresholds through extensive validation against ground-truth test data across diverse operating conditions.
@@ -55,11 +100,21 @@ This is a simplified demonstration. A production sensor fusion system would addi
 
 ## How to Run
 
+**Clear weather (baseline):**
+
 ```bash
 python3 main.py
 ```
 
-Outputs the fused detection summary to the console and saves visualizations to `output/`.
+Outputs the fused detection summary to the console and saves visualizations to `output/fusion_result.png` and `output/fusion_result_3d.png`.
+
+**Simulated adverse weather:**
+
+```bash
+python3 main.py --weather heavy_rain
+```
+
+Applies sensor degradation before fusion, prints a degradation report (detections dropped, average confidence reduction per sensor), and saves annotated visualizations to `output/fusion_result_heavy_rain.png` and `output/fusion_result_3d_heavy_rain.png`. The `--weather` flag accepts: `clear`, `rain`, `heavy_rain`, `fog`, `snow`, `night`, `glare`.
 
 ## Requirements
 
